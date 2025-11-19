@@ -48,10 +48,6 @@ const TYPE_TEXT_ELEMENT = "TEXT_ELEMENT";
 /* ============= Cooperative concurrency ==============
  * https://developer.mozilla.org/docs/Web/API/Background_Tasks_API */
 
-function isFunctionalComponent(fiber) {
-  return isFunction(fiber[TYPE_KEY]);
-}
-
 /* Performs a unit-of-work for the given 'fiber' node
  * and returns the next unit-of-work's node.
  * Performing a unit of work means
@@ -75,6 +71,30 @@ function performUnitOfWork(fiber) {
     }
     nextFiber = nextFiber[PARENT_KEY];
   }
+}
+/* Execute work until the given deadline is over,
+ * then recursively enqueue itself to perform more work
+ * at the next pass through the event loop. */
+function workLoop(deadline) {
+  let shouldYield = false;
+  while (nextUnitOfWork != null && !shouldYield) {
+    nextUnitOfWork = performUnitOfWork(nextUnitOfWork);
+    // https://developer.mozilla.org/docs/Web/API/IdleDeadline
+    shouldYield = deadline.timeRemaining() < 1;
+  }
+
+  if (nextUnitOfWork == null && wipRoot != null) {
+    commit();
+  }
+
+  // https://developer.mozilla.org/docs/Web/API/Window/requestIdleCallback
+  requestIdleCallback(workLoop);
+}
+
+/* ============== React element object ================ */
+
+function isFunctionalComponent(fiber) {
+  return isFunction(fiber[TYPE_KEY]);
 }
 
 function useState(initial) {
@@ -184,27 +204,6 @@ function reconcileChildren(fiber, elements) {
   }
 }
 
-/* Execute work until the given deadline is over,
- * then recursively enqueue itself to perform more work
- * at the next pass through the event loop. */
-function workLoop(deadline) {
-  let shouldYield = false;
-  while (nextUnitOfWork != null && !shouldYield) {
-    nextUnitOfWork = performUnitOfWork(nextUnitOfWork);
-    // https://developer.mozilla.org/docs/Web/API/IdleDeadline
-    shouldYield = deadline.timeRemaining() < 1;
-  }
-
-  if (nextUnitOfWork == null && wipRoot != null) {
-    commit();
-  }
-
-  // https://developer.mozilla.org/docs/Web/API/Window/requestIdleCallback
-  requestIdleCallback(workLoop);
-}
-
-/* ============== React element object ================ */
-
 /* Returns True iff the given prop 'key' is an event listener. */
 function isEvent(key) {
   return key.startsWith("on");
@@ -291,8 +290,7 @@ function createTextElement(text) {
  *   </a>
  *
  *   <b />
- * </div>
- */
+ * </div> */
 function createElement(type, props, ...children) {
   return {
     [TYPE_KEY]: type,
