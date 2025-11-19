@@ -147,9 +147,9 @@ const container = document.getElementById("root");
 const element = React.createElement(
   "div",
   { id: "foo" },
-  React.createElement("h1", { title: "foo" }, "Hello")
-  // React.createElement("a", { href: "https://danielfalbo.com" }, "bar"),
-  // React.createElement("b")
+  React.createElement("h1", { title: "foo" }, "Hello"),
+  React.createElement("a", { href: "https://danielfalbo.com" }, "bar"),
+  React.createElement("hr")
 );
 
 React.render(element, container);
