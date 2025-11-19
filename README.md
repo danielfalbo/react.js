@@ -16,3 +16,4 @@ Toy React implementation
 - use js pre-ES6`class`es `new CustomObj(...)`
 https://chatgpt.com/c/691dd317-f698-832b-8a65-d09d8f42f02f
 https://gemini.google.com/app/e920fca6e423eae9
+- use `switch`
