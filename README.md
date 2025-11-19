@@ -10,6 +10,7 @@ Toy React implementation
 - [Coroutine on Wikipedia](https://wikipedia.org/wiki/Coroutine)
 - [Fiber on Wikipedia](https://wikipedia.org/wiki/Fiber_(computer_science))
 - [Fibers under the magnifying glass](https://open-std.org/jtc1/sc22/wg21/docs/papers/2018/p1364r0.pdf)
+- ["The 3 Ways JS Frameworks Render the DOM" by Ryan Carniato](https://youtu.be/0C-y59betmY)
 
 ## TODO
 
