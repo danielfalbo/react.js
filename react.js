@@ -1,11 +1,36 @@
-/* ================= JavaScript utils ================= */
+/* ================= Utils ============================ */
 
 // https://developer.mozilla.org/docs/Web/JavaScript/Reference/Operators/typeof
-const JS_OBJECT_TYPE_NAME = "object";
-
 function isJsObject(x) {
-  return typeof x === JS_OBJECT_TYPE_NAME;
+  return typeof x === "object";
 }
+
+/* ============= Cooperative concurrency ==============
+ * https://developer.mozilla.org/docs/Web/API/Background_Tasks_API */
+
+/* Global pointer to the next unit of work. */
+let nextUnitOfWork = null;
+
+/* Performs the given 'nextUnitOfWork' and returns
+ * the next unit of work. */
+function performUnitOfWork(nextUnitOfWork) {}
+
+/* Execute work until the given deadline is over,
+ * then recursively enqueue itself to perform more work
+ * at the next pass through the event loop. */
+function workLoop(deadline) {
+  let shouldYield = false;
+  while (nextUnitOfWork != null && !shouldYield) {
+    nextUnitOfWork = performUnitOfWork(nextUnitOfWork);
+    // https://developer.mozilla.org/docs/Web/API/IdleDeadline
+    shouldYield = deadline.timeRemaining() < 1;
+  }
+  // https://developer.mozilla.org/docs/Web/API/Window/requestIdleCallback
+  requestIdleCallback(workLoop);
+}
+
+/* "Install" the work loop inside the event loop. */
+requestIdleCallback(workLoop);
 
 /* ============== React element object ================ */
 
