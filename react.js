@@ -1,8 +1,13 @@
 /* ====================== Utils ======================= */
 
 // https://developer.mozilla.org/docs/Web/JavaScript/Reference/Operators/typeof
-function isJsObject(x) {
+function isObject(x) {
   return typeof x === "object";
+}
+
+// https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Function
+function isFunction(f) {
+  return f instanceof Function;
 }
 
 /* ============= Cooperative concurrency ==============
@@ -22,29 +27,28 @@ const EFFECT_TAG_PLACEMENT = "PLACEMENT";
 /* Effect tag for deleted node. */
 const EFFECT_TAG_DELETION = "DELETION";
 
-/* Performs the given 'unitOfWork' and returns the next.
- * Units of work are fiber nodes. Performing a unit of work
- * means creating a dom object for the given fiber node
+function isFunctionalComponent(fiber) {
+  return isFunction(fiber[REACT_ELEMENT_TYPE_KEY]);
+}
+
+/* Performs a unit-of-work for the given 'fiber' node
+ * and returns the next unit-of-work's node.
+ * Performing a unit of work means
+ * creating a dom object for the given fiber node
  * and pushing it onto the parent dom object. */
-function performUnitOfWork(unitOfWork) {
-  if (unitOfWork[FIBER_NODE_DOM_KEY] == null) {
-    unitOfWork[FIBER_NODE_DOM_KEY] = createDom(unitOfWork);
+function performUnitOfWork(fiber) {
+  if (fiber[FIBER_NODE_DOM_KEY] == null) {
+    fiber[FIBER_NODE_DOM_KEY] = createDom(fiber);
   }
 
-  if (unitOfWork[FIBER_NODE_PARENT_KEY] != null) {
-    unitOfWork[FIBER_NODE_PARENT_KEY][FIBER_NODE_DOM_KEY].appendChild(
-      unitOfWork[FIBER_NODE_DOM_KEY],
-    );
+  const elements = fiber[REACT_ELEMENT_PROPS_KEY][REACT_CHILDREN_PROP_KEY];
+  reconcileChildren(fiber, elements);
+
+  if (fiber[FIBER_NODE_CHILD_KEY] != null) {
+    return fiber[FIBER_NODE_CHILD_KEY];
   }
 
-  const elements = unitOfWork[REACT_ELEMENT_PROPS_KEY][REACT_CHILDREN_PROP_KEY];
-  reconcileChildren(unitOfWork, elements);
-
-  if (unitOfWork[FIBER_NODE_CHILD_KEY] != null) {
-    return unitOfWork[FIBER_NODE_CHILD_KEY];
-  }
-
-  let nextFiber = unitOfWork;
+  let nextFiber = fiber;
   while (nextFiber != null) {
     if (nextFiber[FIBER_NODE_SIBLING_KEY] != null) {
       return nextFiber[FIBER_NODE_SIBLING_KEY];
@@ -93,7 +97,7 @@ function reconcileChildren(fiber, elements) {
       /* Deleted element. */
       if (oldFiber != null) {
         oldFiber[FIBER_EFFECT_TAG_KEY] = EFFECT_TAG_DELETION;
-        deletions.push(oldFiber);
+        wipDeletions.push(oldFiber);
       }
     }
 
@@ -240,7 +244,7 @@ function createElement(type, props, ...children) {
 
       /* Children are just the value of the REACT_CHILDREN_PROP_KEY prop. */
       [REACT_CHILDREN_PROP_KEY]: children.map((child) =>
-        isJsObject(child) ? child : createTextElement(child),
+        isObject(child) ? child : createTextElement(child),
       ),
     },
   };
@@ -389,7 +393,7 @@ function Hello(props) {
 const element = React.createElement(
   "div",
   { id: "foo" },
-  // React.createElement(Hello, { name: "foo" }),
+  React.createElement(Hello, { name: "foo" }),
   React.createElement("a", { href: "https://danielfalbo.com" }, "bar"),
   React.createElement("hr"),
 );
