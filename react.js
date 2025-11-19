@@ -212,7 +212,7 @@ function commit() {
 }
 
 /* Commit the given fiber node,
- * rendering the 'child' onto the 'dom'. */
+ * rendering the given node's dom onto the parent's dom. */
 function commitNode(fiber) {
   if (fiber == null) {
     return;
