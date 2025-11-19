@@ -10,25 +10,42 @@ function isFunction(f) {
   return f instanceof Function;
 }
 
+/* ============= Data structures ====================== */
+
+const DOM_KEY = "dom";
+const PARENT_KEY = "parent";
+const CHILD_KEY = "child";
+const SIBLING_KEY = "sibling";
+const ALTERNATE_KEY = "alternate";
+const EFFECT_TAG_KEY = "effectTag";
+
+/* Effect tag for updated props. */
+const TAG_UPDATE = "UPDATE";
+/* Effect tag for added node. */
+const TAG_PLACEMENT = "PLACEMENT";
+/* Effect tag for deleted node. */
+const TAG_DELETION = "DELETION";
+
+/* Key of children within React props object. */
+const CHILDREN_KEY = "children";
+
+/* Key of props within React element object. */
+const PROPS_KEY = "props";
+
+/* Key of type within React element object. */
+const TYPE_KEY = "type";
+
+// https://developer.mozilla.org/docs/Web/API/Node/nodeValue
+const NODE_VALUE_KEY = "nodeValue";
+
+/* Type name for React element objects that translate to DOM text nodes. */
+const TYPE_TEXT_ELEMENT = "TEXT_ELEMENT";
+
 /* ============= Cooperative concurrency ==============
  * https://developer.mozilla.org/docs/Web/API/Background_Tasks_API */
 
-const FIBER_NODE_DOM_KEY = "dom";
-const FIBER_NODE_PARENT_KEY = "parent";
-const FIBER_NODE_CHILD_KEY = "child";
-const FIBER_NODE_SIBLING_KEY = "sibling";
-const FIBER_NODE_ALTERNATE_KEY = "alternate";
-const FIBER_EFFECT_TAG_KEY = "effectTag";
-
-/* Effect tag for updated props. */
-const EFFECT_TAG_UPDATE = "UPDATE";
-/* Effect tag for added node. */
-const EFFECT_TAG_PLACEMENT = "PLACEMENT";
-/* Effect tag for deleted node. */
-const EFFECT_TAG_DELETION = "DELETION";
-
 function isFunctionalComponent(fiber) {
-  return isFunction(fiber[REACT_ELEMENT_TYPE_KEY]);
+  return isFunction(fiber[TYPE_KEY]);
 }
 
 /* Performs a unit-of-work for the given 'fiber' node
@@ -37,30 +54,43 @@ function isFunctionalComponent(fiber) {
  * creating a dom object for the given fiber node
  * and pushing it onto the parent dom object. */
 function performUnitOfWork(fiber) {
-  if (fiber[FIBER_NODE_DOM_KEY] == null) {
-    fiber[FIBER_NODE_DOM_KEY] = createDom(fiber);
+  if (isFunctionalComponent(fiber)) {
+    updateFunctionalComponent(fiber);
+  } else {
+    updateComponent(fiber);
   }
 
-  const elements = fiber[REACT_ELEMENT_PROPS_KEY][REACT_CHILDREN_PROP_KEY];
-  reconcileChildren(fiber, elements);
-
-  if (fiber[FIBER_NODE_CHILD_KEY] != null) {
-    return fiber[FIBER_NODE_CHILD_KEY];
+  if (fiber[CHILD_KEY] != null) {
+    return fiber[CHILD_KEY];
   }
 
   let nextFiber = fiber;
   while (nextFiber != null) {
-    if (nextFiber[FIBER_NODE_SIBLING_KEY] != null) {
-      return nextFiber[FIBER_NODE_SIBLING_KEY];
+    if (nextFiber[SIBLING_KEY] != null) {
+      return nextFiber[SIBLING_KEY];
     }
-    nextFiber = nextFiber[FIBER_NODE_PARENT_KEY];
+    nextFiber = nextFiber[PARENT_KEY];
   }
+}
+
+function updateFunctionalComponent(fiber) {
+  const children = [fiber[TYPE_KEY](fiber[PROPS_KEY])];
+  reconcileChildren(fiber, children);
+}
+
+function updateComponent(fiber) {
+  if (fiber[DOM_KEY] == null) {
+    fiber[DOM_KEY] = createDom(fiber);
+  }
+
+  const elements = fiber[PROPS_KEY][CHILDREN_KEY];
+  reconcileChildren(fiber, elements);
 }
 
 function reconcileChildren(fiber, elements) {
   let prevSibling = null;
-  let alt = fiber[FIBER_NODE_ALTERNATE_KEY];
-  let oldFiber = alt == null ? null : alt[FIBER_NODE_CHILD_KEY];
+  let alt = fiber[ALTERNATE_KEY];
+  let oldFiber = alt == null ? null : alt[CHILD_KEY];
   let i = 0;
   while (i < elements.length || oldFiber != null) {
     const element = elements[i];
@@ -69,42 +99,42 @@ function reconcileChildren(fiber, elements) {
     const sameType =
       oldFiber != null &&
       element != null &&
-      element[REACT_ELEMENT_TYPE_KEY] == oldFiber[REACT_ELEMENT_TYPE_KEY];
+      element[TYPE_KEY] == oldFiber[TYPE_KEY];
 
     if (sameType) {
       /* Same type, so just update props. */
       newFiber = {
-        [REACT_ELEMENT_TYPE_KEY]: element[REACT_ELEMENT_TYPE_KEY],
-        [REACT_ELEMENT_PROPS_KEY]: element[REACT_ELEMENT_PROPS_KEY],
-        [FIBER_NODE_DOM_KEY]: oldFiber[FIBER_NODE_DOM_KEY],
-        [FIBER_NODE_PARENT_KEY]: fiber,
-        [FIBER_NODE_ALTERNATE_KEY]: oldFiber,
-        [FIBER_EFFECT_TAG_KEY]: EFFECT_TAG_UPDATE,
+        [TYPE_KEY]: element[TYPE_KEY],
+        [PROPS_KEY]: element[PROPS_KEY],
+        [DOM_KEY]: oldFiber[DOM_KEY],
+        [PARENT_KEY]: fiber,
+        [ALTERNATE_KEY]: oldFiber,
+        [EFFECT_TAG_KEY]: TAG_UPDATE,
       };
     } else {
       /* New element. */
       if (element != null) {
         newFiber = {
-          [REACT_ELEMENT_TYPE_KEY]: element[REACT_ELEMENT_TYPE_KEY],
-          [REACT_ELEMENT_PROPS_KEY]: element[REACT_ELEMENT_PROPS_KEY],
-          [FIBER_NODE_DOM_KEY]: null,
-          [FIBER_NODE_PARENT_KEY]: fiber,
-          [FIBER_NODE_ALTERNATE_KEY]: null,
-          [FIBER_EFFECT_TAG_KEY]: EFFECT_TAG_PLACEMENT,
+          [TYPE_KEY]: element[TYPE_KEY],
+          [PROPS_KEY]: element[PROPS_KEY],
+          [DOM_KEY]: null,
+          [PARENT_KEY]: fiber,
+          [ALTERNATE_KEY]: null,
+          [EFFECT_TAG_KEY]: TAG_PLACEMENT,
         };
       }
 
       /* Deleted element. */
       if (oldFiber != null) {
-        oldFiber[FIBER_EFFECT_TAG_KEY] = EFFECT_TAG_DELETION;
+        oldFiber[EFFECT_TAG_KEY] = TAG_DELETION;
         wipDeletions.push(oldFiber);
       }
     }
 
     if (i === 0) {
-      fiber[FIBER_NODE_CHILD_KEY] = newFiber;
+      fiber[CHILD_KEY] = newFiber;
     } else {
-      prevSibling[FIBER_NODE_SIBLING_KEY] = newFiber;
+      prevSibling[SIBLING_KEY] = newFiber;
     }
 
     prevSibling = newFiber;
@@ -134,9 +164,6 @@ function workLoop(deadline) {
 
 /* ============== React element object ================ */
 
-/* Key of children within React props object. */
-const REACT_CHILDREN_PROP_KEY = "children";
-
 /* Returns True iff the given prop 'key' is an event listener. */
 function isEvent(key) {
   return key.startsWith("on");
@@ -149,21 +176,11 @@ function getEventType(key) {
 }
 
 /* Returns True if the given 'key' is a property key,
- * False if it is the REACT_CHILDREN_PROP_KEY or an event listener. */
+ * False if it is the CHILDREN_KEY or an event listener. */
 function isProperty(key) {
-  return key !== REACT_CHILDREN_PROP_KEY && !isEvent(key);
+  return key !== CHILDREN_KEY && !isEvent(key);
 }
 
-/* Key of props within React element object. */
-const REACT_ELEMENT_PROPS_KEY = "props";
-
-/* Key of type within React element object. */
-const REACT_ELEMENT_TYPE_KEY = "type";
-
-// https://developer.mozilla.org/docs/Web/API/Node/nodeValue
-const TEXT_ELEMENT_VALUE_PROP_KEY = "nodeValue";
-
-const REACT_TEXT_ELEMENT_TYPE_NAME = "TEXT_ELEMENT";
 /* Create React text element object.
  * Text elements look like
  * {
@@ -172,8 +189,8 @@ const REACT_TEXT_ELEMENT_TYPE_NAME = "TEXT_ELEMENT";
  * }
  */
 function createTextElement(text) {
-  return createElement(REACT_TEXT_ELEMENT_TYPE_NAME, {
-    [TEXT_ELEMENT_VALUE_PROP_KEY]: text,
+  return createElement(TYPE_TEXT_ELEMENT, {
+    [NODE_VALUE_KEY]: text,
   });
 }
 
@@ -237,13 +254,13 @@ function createTextElement(text) {
  */
 function createElement(type, props, ...children) {
   return {
-    [REACT_ELEMENT_TYPE_KEY]: type,
+    [TYPE_KEY]: type,
 
-    [REACT_ELEMENT_PROPS_KEY]: {
+    [PROPS_KEY]: {
       ...props,
 
-      /* Children are just the value of the REACT_CHILDREN_PROP_KEY prop. */
-      [REACT_CHILDREN_PROP_KEY]: children.map((child) =>
+      /* Children are just the value of the CHILDREN_KEY prop. */
+      [CHILDREN_KEY]: children.map((child) =>
         isObject(child) ? child : createTextElement(child),
       ),
     },
@@ -254,14 +271,14 @@ function createElement(type, props, ...children) {
 
 function createDom(fiber) {
   const dom =
-    fiber[REACT_ELEMENT_TYPE_KEY] === REACT_TEXT_ELEMENT_TYPE_NAME
+    fiber[TYPE_KEY] === TYPE_TEXT_ELEMENT
       ? document.createTextNode("")
-      : document.createElement(fiber[REACT_ELEMENT_TYPE_KEY]);
+      : document.createElement(fiber[TYPE_KEY]);
 
-  Object.keys(fiber[REACT_ELEMENT_PROPS_KEY])
+  Object.keys(fiber[PROPS_KEY])
     .filter(isProperty)
     .forEach((key) => {
-      dom[key] = fiber[REACT_ELEMENT_PROPS_KEY][key];
+      dom[key] = fiber[PROPS_KEY][key];
     });
 
   return dom;
@@ -318,7 +335,7 @@ function updateDom(dom, prevProps, nextProps) {
 /* Commit the WIP root. */
 function commit() {
   wipDeletions.forEach(commitNode);
-  commitNode(wipRoot[FIBER_NODE_CHILD_KEY]);
+  commitNode(wipRoot[CHILD_KEY]);
   currentRoot = wipRoot;
   wipRoot = null;
 }
@@ -329,36 +346,44 @@ function commitNode(fiber) {
   if (fiber == null) {
     return;
   }
-  const domParent = fiber[FIBER_NODE_PARENT_KEY][FIBER_NODE_DOM_KEY];
 
-  if (fiber[FIBER_EFFECT_TAG_KEY] === EFFECT_TAG_PLACEMENT) {
-    domParent.appendChild(fiber[FIBER_NODE_DOM_KEY]);
-  } else if (fiber[FIBER_EFFECT_TAG_KEY] === EFFECT_TAG_DELETION) {
-    domParent.removeChild(fiber[FIBER_NODE_DOM_KEY]);
-  } else if (
-    fiber[FIBER_EFFECT_TAG_KEY] === EFFECT_TAG_UPDATE &&
-    fiber[FIBER_NODE_DOM_KEY] != null
-  ) {
+  let domParentFiber = fiber[PARENT_KEY];
+  while (domParentFiber[DOM_KEY] == null) {
+    domParentFiber = domParentFiber[PARENT_KEY];
+  }
+  const domParent = domParentFiber[DOM_KEY];
+
+  if (fiber[EFFECT_TAG_KEY] === TAG_PLACEMENT && fiber[DOM_KEY] != null) {
+    domParent.appendChild(fiber[DOM_KEY]);
+  } else if (fiber[EFFECT_TAG_KEY] === TAG_UPDATE && fiber[DOM_KEY] != null) {
     updateDom(
-      fiber[FIBER_NODE_DOM_KEY],
-      fiber[FIBER_NODE_ALTERNATE_KEY][REACT_ELEMENT_PROPS_KEY],
-      fiber[REACT_ELEMENT_PROPS_KEY],
+      fiber[DOM_KEY],
+      fiber[ALTERNATE_KEY][PROPS_KEY],
+      fiber[PROPS_KEY],
     );
-  } else {
-    console.error("Illegal effect tag", fiber[FIBER_EFFECT_TAG_KEY]);
+  } else if (fiber[EFFECT_TAG_KEY] === TAG_DELETION) {
+    commitDeletion(fiber, domParent);
   }
 
-  commitNode(fiber[FIBER_NODE_CHILD_KEY]);
-  commitNode(fiber[FIBER_NODE_SIBLING_KEY]);
+  commitNode(fiber[CHILD_KEY]);
+  commitNode(fiber[SIBLING_KEY]);
+}
+
+function commitDeletion(fiber, domParent) {
+  if (fiber[DOM_KEY] != null) {
+    domParent.removeChild(fiber[DOM_KEY]);
+  } else {
+    commitDeletion(fiber[CHILD_KEY], domParent);
+  }
 }
 
 /* Set next unit of work to be the rendering of the given
  * 'element' onto the given 'container'. */
 function render(element, container) {
   nextUnitOfWork = wipRoot = {
-    [FIBER_NODE_DOM_KEY]: container,
-    [REACT_ELEMENT_PROPS_KEY]: { [REACT_CHILDREN_PROP_KEY]: [element] },
-    [FIBER_NODE_ALTERNATE_KEY]: currentRoot,
+    [DOM_KEY]: container,
+    [PROPS_KEY]: { [CHILDREN_KEY]: [element] },
+    [ALTERNATE_KEY]: currentRoot,
   };
 }
 
@@ -367,6 +392,7 @@ function render(element, container) {
 const React = {
   createElement,
   render,
+  // useState,
 };
 
 /* ================== React app ======================= */
