@@ -37,9 +37,8 @@ to rendering of `element` as child of `container`.
 the elements as DOM-like objects at the `_wipFiberRoot` buffer.
 4. As we finish rendering the last fiber node, `workLoop` calls `commit`
 which flushes the changes accumulated at `_wipFiberRoot` onto the browser's DOM.
-All nodes will have the `"UPDATE"` `effectTag` and
-`isNew(prevProps, nextProps)(key)` will return `True` for every prop of every
-node, so all the changes will be applied to the `htmlElement`.
+All nodes will have the `"PLACEMENT"` `effectTag` so they all get appended as
+chilldren to the `htmlElement`.
 5. You click on the `+1` button.
 6. The callback associated with the button is enqueued
 onto the browser's Tasks Queue.
@@ -59,8 +58,9 @@ state value.
 10. As we finish rendering the last fiber node, `workLoop` calls `commit`
 which flushes the changes accumulated at `_wipFiberRoot` onto the browser's DOM.
 The `isNew(prevProps, nextProps)(key)` check for the `"UPDATE"`d nodes diff and
-will filter out most nodes, except our `Counter` node, which will have a new
-value for the counter, which will then be applied to its `htmlElement`.
+will filter out most nodes, except the `Counter` node's inner `h1` text,
+which will have a new value for the counter, which will then be applied to its
+`htmlElement` by `applyPropsDiffToDom`.
 11. You see the counter value increased by 1 in your browser.
 
 ## Resources
