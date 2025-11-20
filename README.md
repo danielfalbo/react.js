@@ -8,17 +8,16 @@ Usually prompted to the best thinking LLM available at the given time.
 
 
 ```
-<README>
-</README>
+<Sample Flow explanation>
+</Sample Flow explanation>
 
 <react.js>
 </react.js>
 
-I'm a senior software engineer at Meta.
-We invented and maintain React.
-We are looking to hire a new senior staff developer to lead the React
-project for the future.
-They made a toy implementation of React as an interviewing step.
+I'm a professor at a top university.
+I'm teaching a front-end internals and data structures course.
+One of my students just built a Toy React
+implementation following Rodrigo Pombo's `didact`.
 This is their progress so far.
 
 What do you see from their current implementation?
@@ -27,14 +26,6 @@ Do you see red flags?
 Do you think they understand what they are doing?
 Do you see any correctness issue?
 Do you see any bug?
-Could the code be more elegant and better commented?
-Could the code be more clear?
-Can the code be refactored to be more beautiful?
-Can the code be refactored to be more simple?
-Can the code be refactored to have better abstractions,
-never repeating blocks of code?
-
-Should we hire them as the new React project lead?
 ```
 
 ## Sample Flow
