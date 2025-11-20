@@ -75,4 +75,5 @@ value for the counter, which will then be applied to its `htmlElement`.
 ## TODO
 
 - `[COOL]` Flush onto something that's not the browser's DOM
+- `[BORING]` Test deletion
 - `[PEDANTIC]` Use more `switch`es
