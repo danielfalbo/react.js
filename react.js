@@ -10,33 +10,144 @@ function isFunction(f) {
   return f instanceof Function;
 }
 
+/* ============== React element object ================ */
+
+/* Create React element object.
+ *
+ * For example
+ *
+ * createElement(
+ *   "div",
+ *   { id: "foo" },
+ *   React.createElement("h1", { title: "foo" }, "Hello"),
+ *   React.createElement("a", { href: "https://danielfalbo.com" }, "bar"),
+ *   React.createElement("b")
+ * )
+ *
+ * returns an object like
+ *
+ * {
+ *    type: "div",
+ *    props: {
+ *      id: "foo",
+ *      children: [
+ *        {
+ *          type: "h1",
+ *          props: {
+ *            title: "foo",
+ *            children: [
+ *              { type: "TEXT_ELEMENT", props: { nodeValue: "Hello" } }
+ *            ]
+ *          }
+ *        },
+ *
+ *        {
+ *          type: "a",
+ *          props: {
+ *            href: "https://danielfalbo.com",
+ *            children: [
+ *              { type: "TEXT_ELEMENT", props: { nodeValue: "bar" } }
+ *            ]
+ *          }
+ *        },
+ *
+ *        { type: "b" },
+ *      ]
+ *    }
+ * }
+ *
+ * which represents
+ *
+ * <div id="foo">
+ *   <h1 title="foo">
+ *     Hello
+ *   </h1>
+ *
+ *   <a href="https://danielfalbo.com">
+ *     bar
+ *   </a>
+ *
+ *   <b />
+ * </div> */
+function createElement(type, props, ...children) {
+  return {
+    type,
+
+    props: {
+      ...props,
+
+      /* Children are just the value of the CHILDREN_KEY prop. */
+      children: children.map((child) =>
+        isObject(child) ? child : createTextElement(child),
+      ),
+    },
+  };
+}
+
+/* Create React text element object.
+ * Text elements are structured like
+ * {
+ *    type: "TEXT_ELEMENT",
+ *    props: { nodeValue: "text here" }
+ * }
+ */
+function createTextElement(text) {
+  return createElement("TEXT_ELEMENT", {
+    // https://developer.mozilla.org/docs/Web/API/Node/nodeValue
+    nodeValue: text,
+  });
+}
+
+/* Returns True iff the given prop 'key' is an event listener. */
+function isEvent(key) {
+  return key.startsWith("on");
+}
+
+/* Returns the lowercased event type represented by the given 'key'. */
+function getEventType(key) {
+  // Event listener keys start with "on", so we strip it out.
+  return key.toLowerCase().substring(2);
+}
+
+/* Returns True if the given 'key' is a property key,
+ * False if it is the CHILDREN_KEY or an event listener. */
+function isProperty(key) {
+  return key !== "children" && !isEvent(key);
+}
+
 /* ============= Cooperative concurrency ==============
  * https://developer.mozilla.org/docs/Web/API/Background_Tasks_API */
 
-/* Performs a unit-of-work for the given 'fiber' node
+/* Performs a unit-of-work for the given 'fiberNode'
  * and returns the next unit-of-work's node.
- * Performing a unit of work means
- * creating a dom object for the given fiber node
- * and pushing it onto the parent dom object. */
-function performUnitOfWork(fiber) {
-  if (isFunctionalComponent(fiber)) {
-    updateFunctionalComponent(fiber);
+ * Performing a unit of work means updating the given fiber
+ * node and pushing it onto the parent's dom object. */
+function performUnitOfWork(fiberNode) {
+  if (isFunction(fiberNode.type)) {
+    updateFunctionalComponent(fiberNode);
   } else {
-    updateComponent(fiber);
+    updateComponent(fiberNode);
   }
 
-  if (fiber.child != null) {
-    return fiber.child;
+  /* Fiber traversal:
+   * if has child: go to child;
+   * else if has sibling: go to sibling;
+   * else return parent's sibling,
+   *    backtracking to parents until one has a sibling, or returning
+   *    null if we backtrack until the root and there's nothing to do.
+   * */
+  if (fiberNode.child != null) {
+    return fiberNode.child;
   }
-
-  let nextFiber = fiber;
-  while (nextFiber != null) {
-    if (nextFiber.sibling != null) {
-      return nextFiber.sibling;
+  let nextFiberNode = fiberNode;
+  while (nextFiberNode != null) {
+    if (nextFiberNode.sibling != null) {
+      return nextFiberNode.sibling;
     }
-    nextFiber = nextFiber.parent;
+    nextFiberNode = nextFiberNode.parent;
   }
 }
+
 /* Execute work until the given deadline is over,
  * then recursively enqueue itself to perform more work
  * at the next pass through the event loop. */
@@ -56,11 +167,7 @@ function workLoop(deadline) {
   requestIdleCallback(workLoop);
 }
 
-/* ============== React element object ================ */
-
-function isFunctionalComponent(fiber) {
-  return isFunction(fiber.type);
-}
+/* ==================== Hooks ========================= */
 
 function useState(initial) {
   const alt = wipFiber.alternate;
@@ -90,6 +197,67 @@ function useState(initial) {
   wipFiber.hooks.push(hook);
   hookIndex++;
   return [hook.state, setState];
+}
+
+/* ==================== Rendering ===================== */
+
+function createDom(fiber) {
+  const dom =
+    fiber.type === "TEXT_ELEMENT"
+      ? document.createTextNode("")
+      : document.createElement(fiber.type);
+
+  updateDom(dom, {}, fiber.props);
+
+  return dom;
+}
+
+function isNew(prev, next) {
+  function isKeyNew(key) {
+    return prev[key] !== next[key];
+  }
+  return isKeyNew;
+}
+function isGone(next) {
+  function isKeyGone(key) {
+    return !(key in next);
+  }
+  return isKeyGone;
+}
+function updateDom(dom, prevProps, nextProps) {
+  /* Remove old or changed event listeners. */
+  Object.keys(prevProps)
+    .filter(isEvent)
+    .filter((key) => isGone(nextProps)(key) || isNew(prevProps, nextProps)(key))
+    .forEach((key) => {
+      const eventType = getEventType(key);
+      dom.removeEventListener(eventType, prevProps[key]);
+    });
+
+  /* Remove old properties. */
+  Object.keys(prevProps)
+    .filter(isProperty)
+    .filter(isGone(nextProps))
+    .forEach((key) => {
+      delete dom[key];
+    });
+
+  /* Set new or changed properties. */
+  Object.keys(nextProps)
+    .filter(isProperty)
+    .filter(isNew(prevProps, nextProps))
+    .forEach((key) => {
+      dom[key] = nextProps[key];
+    });
+
+  /* Add new or changed event listeners. */
+  Object.keys(nextProps)
+    .filter(isEvent)
+    .filter(isNew(prevProps, nextProps))
+    .forEach((key) => {
+      const eventType = getEventType(key);
+      dom.addEventListener(eventType, nextProps[key]);
+    });
 }
 
 function updateFunctionalComponent(fiber) {
@@ -165,170 +333,6 @@ function reconcileChildren(fiber, elements) {
 
     i++;
   }
-}
-
-/* Returns True iff the given prop 'key' is an event listener. */
-function isEvent(key) {
-  return key.startsWith("on");
-}
-
-/* Returns the lowercased event type represented by the given 'key'. */
-function getEventType(key) {
-  // Event listener keys start with "on", so we strip it out.
-  return key.toLowerCase().substring(2);
-}
-
-/* Returns True if the given 'key' is a property key,
- * False if it is the CHILDREN_KEY or an event listener. */
-function isProperty(key) {
-  return key !== "children" && !isEvent(key);
-}
-
-/* Create React text element object.
- * Text elements look like
- * {
- *    type: "TEXT_ELEMENT",
- *    props: { nodeValue: "text here", children: [] }
- * }
- */
-function createTextElement(text) {
-  return createElement("TEXT_ELEMENT", {
-    // https://developer.mozilla.org/docs/Web/API/Node/nodeValue
-    nodeValue: text,
-  });
-}
-
-/* Create React element object.
- *
- * For example
- *
- * createElement(
- *   "div",
- *   { id: "foo" },
- *   React.createElement("h1", { title: "foo" }, "Hello"),
- *   React.createElement("a", { href: "https://danielfalbo.com" }, "bar"),
- *   React.createElement("b")
- * )
- *
- * returns an object like
- *
- * {
- *    type: "div",
- *    props: {
- *      id: "foo",
- *      children: [
- *        {
- *          type: "h1",
- *          props: {
- *            title: "foo",
- *            children: [
- *              { type: "TEXT_ELEMENT", props: { nodeValue: "Hello" } }
- *            ]
- *          }
- *        },
- *
- *        {
- *          type: "a",
- *          props: {
- *            href: "https://danielfalbo.com",
- *            children: [
- *              { type: "TEXT_ELEMENT", props: { nodeValue: "bar" } }
- *            ]
- *          }
- *        },
- *
- *        { type: "b" },
- *      ]
- *    }
- * }
- *
- * which represents
- *
- * <div id="foo">
- *   <h1 title="foo">
- *     Hello
- *   </h1>
- *
- *   <a href="https://danielfalbo.com">
- *     bar
- *   </a>
- *
- *   <b />
- * </div> */
-function createElement(type, props, ...children) {
-  return {
-    type,
-
-    props: {
-      ...props,
-
-      /* Children are just the value of the CHILDREN_KEY prop. */
-      children: children.map((child) =>
-        isObject(child) ? child : createTextElement(child),
-      ),
-    },
-  };
-}
-
-/* ==================== Rendering ===================== */
-
-function createDom(fiber) {
-  const dom =
-    fiber.type === "TEXT_ELEMENT"
-      ? document.createTextNode("")
-      : document.createElement(fiber.type);
-
-  updateDom(dom, {}, fiber.props);
-
-  return dom;
-}
-
-function isNew(prev, next) {
-  function isKeyNew(key) {
-    return prev[key] !== next[key];
-  }
-  return isKeyNew;
-}
-function isGone(next) {
-  function isKeyGone(key) {
-    return !(key in next);
-  }
-  return isKeyGone;
-}
-function updateDom(dom, prevProps, nextProps) {
-  /* Remove old or changed event listeners. */
-  Object.keys(prevProps)
-    .filter(isEvent)
-    .filter((key) => isGone(nextProps)(key) || isNew(prevProps, nextProps)(key))
-    .forEach((key) => {
-      const eventType = getEventType(key);
-      dom.removeEventListener(eventType, prevProps[key]);
-    });
-
-  /* Remove old properties. */
-  Object.keys(prevProps)
-    .filter(isProperty)
-    .filter(isGone(nextProps))
-    .forEach((key) => {
-      delete dom[key];
-    });
-
-  /* Set new or changed properties. */
-  Object.keys(nextProps)
-    .filter(isProperty)
-    .filter(isNew(prevProps, nextProps))
-    .forEach((key) => {
-      dom[key] = nextProps[key];
-    });
-
-  /* Add new or changed event listeners. */
-  Object.keys(nextProps)
-    .filter(isEvent)
-    .filter(isNew(prevProps, nextProps))
-    .forEach((key) => {
-      const eventType = getEventType(key);
-      dom.addEventListener(eventType, nextProps[key]);
-    });
 }
 
 /* Commit the WIP root. */
