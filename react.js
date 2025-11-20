@@ -173,14 +173,14 @@ function getNext(fiberNode) {
 function workLoop(deadline) {
   /* Execute virtual work until the given deadline is over. */
   let shouldYield = false;
-  while (nextWipFiberNode != null && !shouldYield) {
-    nextWipFiberNode = performUnitOfWork(nextWipFiberNode);
+  while (_nextWipFiberNode != null && !shouldYield) {
+    _nextWipFiberNode = performUnitOfWork(_nextWipFiberNode);
     // https://developer.mozilla.org/docs/Web/API/IdleDeadline
     shouldYield = deadline.timeRemaining() < 1;
   }
 
   /* If finished all virtual work, apply changes to real DOM. */
-  if (nextWipFiberNode == null && wipFiberRoot != null) {
+  if (_nextWipFiberNode == null && _wipFiberRoot != null) {
     commit();
   }
 
@@ -190,13 +190,14 @@ function workLoop(deadline) {
 }
 
 /* Set next unit of work to be the rendering of
- * the given 'element' onto the given 'container'. */
-function render(element, container) {
-  nextWipFiberNode = wipFiberRoot = {
-    dom: container,
-    props: { children: [element] },
-    alternate: flushedFiberRoot,
+ * the given React element onto the given Web API HTMLElement container.
+ * https://developer.mozilla.org/en-US/docs/Web/API/HTMLElement */
+function render(reactElement, webApiHtmlElement) {
+  _wipFiberRoot = {
+    dom: webApiHtmlElement,
+    props: { children: [reactElement] },
   };
+  _nextWipFiberNode = _wipFiberRoot;
 }
 
 /* Performs a unit-of-work for the given 'fiberNode'
@@ -214,15 +215,6 @@ function performUnitOfWork(fiberNode) {
 }
 
 /* ============== Virtual Rendering =================== */
-
-/* Functional components can implement hooks. */
-function updateFunctionalComponent(fiber) {
-  wipFunctionalFiberNode = fiber;
-  hookIndex = 0;
-  wipFunctionalFiberNode.hooks = [];
-  const children = [fiber.type(fiber.props)];
-  reconcileChildren(fiber, children);
-}
 
 /* Vanilla components are static components without hooks. */
 function updateVanillaComponent(fiber) {
@@ -243,6 +235,15 @@ function createDom(fiber) {
   updateDom(dom, {}, fiber.props);
 
   return dom;
+}
+
+/* Functional components can implement hooks. */
+function updateFunctionalComponent(fiber) {
+  _wipFunctionalFiberNode = fiber;
+  _hookIndex = 0;
+  _wipFunctionalFiberNode.hooks = [];
+  const children = [fiber.type(fiber.props)];
+  reconcileChildren(fiber, children);
 }
 
 function isNew(prev, next) {
@@ -331,7 +332,7 @@ function reconcileChildren(fiber, elements) {
       /* Deleted element. */
       if (oldFiber != null) {
         oldFiber.effectTag = "DELETION";
-        wipDeletions.push(oldFiber);
+        _wipDeletions.push(oldFiber);
       }
     }
 
@@ -354,9 +355,9 @@ function reconcileChildren(fiber, elements) {
 /* ==================== Hooks ========================= */
 
 function useState(initial) {
-  const alt = wipFunctionalFiberNode.alternate;
+  const alt = _wipFunctionalFiberNode.alternate;
   const oldHook =
-    alt != null && alt.hooks != null ? alt.hooks[hookIndex] : null;
+    alt != null && alt.hooks != null ? alt.hooks[_hookIndex] : null;
   const hook = {
     state: oldHook != null ? oldHook.state : initial,
     queue: [],
@@ -369,17 +370,17 @@ function useState(initial) {
 
   const setState = (action) => {
     hook.queue.push(action);
-    wipFiberRoot = {
-      dom: flushedFiberRoot.dom,
-      props: flushedFiberRoot.props,
-      alternate: flushedFiberRoot,
+    _wipFiberRoot = {
+      dom: _flushedFiberRoot.dom,
+      props: _flushedFiberRoot.props,
+      alternate: _flushedFiberRoot,
     };
-    nextWipFiberNode = wipFiberRoot;
-    wipDeletions = [];
+    _nextWipFiberNode = _wipFiberRoot;
+    _wipDeletions = [];
   };
 
-  wipFunctionalFiberNode.hooks.push(hook);
-  hookIndex++;
+  _wipFunctionalFiberNode.hooks.push(hook);
+  _hookIndex++;
   return [hook.state, setState];
 }
 
@@ -389,10 +390,10 @@ function useEffect() {}
 
 /* Commit the WIP root. */
 function commit() {
-  wipDeletions.forEach(commitNode);
-  commitNode(wipFiberRoot.child);
-  flushedFiberRoot = wipFiberRoot;
-  wipFiberRoot = null;
+  _wipDeletions.forEach(commitNode);
+  commitNode(_wipFiberRoot.child);
+  _flushedFiberRoot = _wipFiberRoot;
+  _wipFiberRoot = null;
 }
 
 /* Commit the given fiber node,
@@ -486,25 +487,25 @@ const App = () =>
     React.createElement(Counter, { initial: 42 }),
   );
 
-/* =============== Global pointers ==================== */
+/* =============== React globals ====================== */
 
 /* Global pointer to the fiber root of the last rendered DOM */
-let flushedFiberRoot = null;
+let _flushedFiberRoot = null;
 
 /* Global pointer to the fiber root of the work in progress buffer. */
-let wipFiberRoot = null;
+let _wipFiberRoot = null;
 
 /* Global pointer to the next unit of work as fiber node. */
-let nextWipFiberNode = null;
+let _nextWipFiberNode = null;
 
 /* Array of fiber nodes that are present in the 'flushedFiberRoot'
  * but will get deleted at the next flush. */
-let wipDeletions = [];
+let _wipDeletions = [];
 
 /* */
-let wipFunctionalFiberNode = null;
+let _wipFunctionalFiberNode = null;
 /* */
-let hookIndex = null;
+let _hookIndex = null;
 
 /* ====== Start React workLoop and render app ========= */
 
