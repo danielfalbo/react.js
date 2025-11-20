@@ -8,8 +8,8 @@ Usually prompted to the best thinking LLM available at the given time.
 
 
 ```
-<README's Sample Flow explanation section>
-</README's Sample Flow explanation section>
+<README>
+</README>
 
 <react.js>
 </react.js>
