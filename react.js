@@ -10,6 +10,15 @@ function isFunction(f) {
   return f instanceof Function;
 }
 
+/* Given objects 'prev' and 'next' returns a function that given a 'key' returns
+ * True iff the value associated with 'key' is not the same in both objects. */
+const isNew = (prev, next) => (key) => prev[key] !== next[key];
+
+/* Given the object 'o' returns a function that given a 'key'
+ * returns True iff the given 'key' is not present among the
+ * keys of the given object. */
+const isGone = (o) => (key) => !(key in o);
+
 /* ============== React element object ================ */
 
 /* Create React element object.
@@ -217,13 +226,13 @@ function performUnitOfWork(fiberNode) {
 /* ============== Virtual Rendering =================== */
 
 /* Vanilla components are static components without hooks. */
-function updateVanillaComponent(fiber) {
-  if (fiber.dom == null) {
-    fiber.dom = createDom(fiber);
+function updateVanillaComponent(wipFiberNode) {
+  if (wipFiberNode.dom == null) {
+    wipFiberNode.dom = createDom(wipFiberNode);
   }
 
-  const reactElements = fiber.props.children;
-  reconcileChildren(fiber, reactElements);
+  const reactElements = wipFiberNode.props.children;
+  reconcileChildren(wipFiberNode, reactElements);
 }
 
 function createDom(fiber) {
@@ -232,40 +241,30 @@ function createDom(fiber) {
       ? document.createTextNode("")
       : document.createElement(fiber.type);
 
-  updateDom(dom, {}, fiber.props);
+  applyPropsDiffToDom(dom, {}, fiber.props);
 
   return dom;
 }
 
 /* Functional components can implement hooks. */
-function updateFunctionalComponent(fiber) {
-  _wipFunctionalFiberNode = fiber;
+function updateFunctionalComponent(wipFiberNode) {
+  _wipFunctionalFiberNode = wipFiberNode;
   _hookIndex = 0;
   _wipFunctionalFiberNode.hooks = [];
-  const children = [fiber.type(fiber.props)];
-  reconcileChildren(fiber, children);
+  const children = [wipFiberNode.type(wipFiberNode.props)];
+  reconcileChildren(wipFiberNode, children);
 }
 
-function isNew(prev, next) {
-  function isKeyNew(key) {
-    return prev[key] !== next[key];
-  }
-  return isKeyNew;
-}
-function isGone(next) {
-  function isKeyGone(key) {
-    return !(key in next);
-  }
-  return isKeyGone;
-}
-function updateDom(dom, prevProps, nextProps) {
+/* Applies the diff between 'prevProps' and 'nextProps'
+ * to the given 'htmlElement' DOM node. */
+function applyPropsDiffToDom(htmlElement, prevProps, nextProps) {
   /* Remove old or changed event listeners. */
   Object.keys(prevProps)
     .filter(isEvent)
     .filter((key) => isGone(nextProps)(key) || isNew(prevProps, nextProps)(key))
     .forEach((key) => {
       const eventType = getEventType(key);
-      dom.removeEventListener(eventType, prevProps[key]);
+      htmlElement.removeEventListener(eventType, prevProps[key]);
     });
 
   /* Remove old properties. */
@@ -273,7 +272,7 @@ function updateDom(dom, prevProps, nextProps) {
     .filter(isProperty)
     .filter(isGone(nextProps))
     .forEach((key) => {
-      delete dom[key];
+      delete htmlElement[key];
     });
 
   /* Set new or changed properties. */
@@ -281,7 +280,7 @@ function updateDom(dom, prevProps, nextProps) {
     .filter(isProperty)
     .filter(isNew(prevProps, nextProps))
     .forEach((key) => {
-      dom[key] = nextProps[key];
+      htmlElement[key] = nextProps[key];
     });
 
   /* Add new or changed event listeners. */
@@ -290,7 +289,7 @@ function updateDom(dom, prevProps, nextProps) {
     .filter(isNew(prevProps, nextProps))
     .forEach((key) => {
       const eventType = getEventType(key);
-      dom.addEventListener(eventType, nextProps[key]);
+      htmlElement.addEventListener(eventType, nextProps[key]);
     });
 }
 
@@ -443,7 +442,7 @@ function commitNode(fiber) {
   if (fiber.effectTag === "PLACEMENT" && fiber.dom != null) {
     domParent.appendChild(fiber.dom);
   } else if (fiber.effectTag === "UPDATE" && fiber.dom != null) {
-    updateDom(fiber.dom, fiber.alt.props, fiber.props);
+    applyPropsDiffToDom(fiber.dom, fiber.alt.props, fiber.props);
   } else if (fiber.effectTag === "DELETION") {
     commitDeletion(fiber, domParent);
   }
@@ -505,10 +504,10 @@ const App = () =>
     "div",
 
     /* props */
-    { id: "foo" },
+    { id: "main" },
 
     /* children */
-    React.createElement(Hello, { name: "foo" }),
+    React.createElement(Hello, { name: "dev" }),
     React.createElement(
       "a",
       { href: "https://danielfalbo.com" },
