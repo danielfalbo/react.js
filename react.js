@@ -222,8 +222,8 @@ function updateVanillaComponent(fiber) {
     fiber.dom = createDom(fiber);
   }
 
-  const elements = fiber.props.children;
-  reconcileChildren(fiber, elements);
+  const reactElements = fiber.props.children;
+  reconcileChildren(fiber, reactElements);
 }
 
 function createDom(fiber) {
@@ -294,68 +294,99 @@ function updateDom(dom, prevProps, nextProps) {
     });
 }
 
-function reconcileChildren(fiber, elements) {
+/* Update the 'wipFiberNode' with the given elements.
+ *
+ * For example, WLOG, given elements : [A, B, C, D] and
+ *
+ * wipFiberNode
+ *      |
+ *      v
+ *    child -> sibling -> sibling -> sibling,
+ *
+ * A is applied to the child, and then B, C, D as chain of siblings.
+ *
+ * wipFiberNode
+ *      |
+ *      v
+ *      A -> B -> C -> D
+ *
+ * Excess siblings are considered deleted, marked with effectTag "DELETION"
+ * and added to the _wipDeletions buffer.
+ *
+ * Excess elements are considered new and marked with effectTag "PLACEMENT".
+ *
+ * Elements that have an existent fiber node correspondance are considered
+ * updated and marked with effectTag "UPDATE". */
+function reconcileChildren(wipFiberNode, elements) {
+  let index = 0;
+  let altNode = wipFiberNode.alt == null ? null : wipFiberNode.alt.child;
+
   let prevSibling = null;
-  let alt = fiber.alternate;
-  let oldFiber = alt == null ? null : alt.child;
-  let i = 0;
-  while (i < elements.length || oldFiber != null) {
-    const element = elements[i];
-    let newFiber = null;
 
-    const sameType =
-      oldFiber != null && element != null && element.type === oldFiber.type;
+  /* We iterate through elements and their corersponding fiber nodes. */
+  while (index < elements.length || altNode != null) {
+    let newFiberNode = null;
 
-    if (sameType) {
+    const element = elements[index];
+
+    if (altNode != null && element != null && element.type === altNode.type) {
       /* Same type, so just update props. */
-      newFiber = {
-        type: element.type,
+      newFiberNode = {
+        type: altNode.type,
         props: element.props,
-        dom: oldFiber.dom,
-        parent: fiber,
-        alternate: oldFiber,
+        dom: altNode.dom,
+        parent: wipFiberNode,
+        alt: altNode,
         effectTag: "UPDATE",
       };
     } else {
       /* New element. */
       if (element != null) {
-        newFiber = {
+        newFiberNode = {
           type: element.type,
           props: element.props,
           dom: null,
-          parent: fiber,
-          alternate: null,
+          parent: wipFiberNode,
+          alt: null,
           effectTag: "PLACEMENT",
         };
       }
 
       /* Deleted element. */
-      if (oldFiber != null) {
-        oldFiber.effectTag = "DELETION";
-        _wipDeletions.push(oldFiber);
+      if (altNode != null) {
+        altNode.effectTag = "DELETION";
+        _wipDeletions.push(altNode);
       }
     }
 
-    if (oldFiber != null) {
-      oldFiber = oldFiber.sibling;
+    /* Advance altNode to sibling for next iteration. */
+    if (altNode != null) {
+      altNode = altNode.sibling;
     }
 
-    if (i === 0) {
-      fiber.child = newFiber;
+    /* Set child/sibling pointers to new node.
+     *
+     * On the first iteration we set the new node as child.
+     * On the following iterations we set the new node as sibling. */
+    if (index === 0) {
+      wipFiberNode.child = newFiberNode;
     } else {
-      prevSibling.sibling = newFiber;
+      prevSibling.sibling = newFiberNode;
     }
 
-    prevSibling = newFiber;
+    /* Keep track of this new node as 'prevSibling' so at next
+     * iteration we'll be able to set the new node as sibling of this one. */
+    prevSibling = newFiberNode;
 
-    i++;
+    /* Advance index for next iteration. */
+    index++;
   }
 }
 
 /* ==================== Hooks ========================= */
 
 function useState(initial) {
-  const alt = _wipFunctionalFiberNode.alternate;
+  const alt = _wipFunctionalFiberNode.alt;
   const oldHook =
     alt != null && alt.hooks != null ? alt.hooks[_hookIndex] : null;
   const hook = {
@@ -373,7 +404,7 @@ function useState(initial) {
     _wipFiberRoot = {
       dom: _flushedFiberRoot.dom,
       props: _flushedFiberRoot.props,
-      alternate: _flushedFiberRoot,
+      alt: _flushedFiberRoot,
     };
     _nextWipFiberNode = _wipFiberRoot;
     _wipDeletions = [];
@@ -412,7 +443,7 @@ function commitNode(fiber) {
   if (fiber.effectTag === "PLACEMENT" && fiber.dom != null) {
     domParent.appendChild(fiber.dom);
   } else if (fiber.effectTag === "UPDATE" && fiber.dom != null) {
-    updateDom(fiber.dom, fiber.alternate.props, fiber.props);
+    updateDom(fiber.dom, fiber.alt.props, fiber.props);
   } else if (fiber.effectTag === "DELETION") {
     commitDeletion(fiber, domParent);
   }
